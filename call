@@ -1,0 +1,53 @@
+#include <iostream>
+#include <string>
+#include <curl/curl.h>
+
+// Callback to capture HTTP response into a std::string
+size_t WriteCallback(void* contents, size_t size, size_t nmemb, std::string* s) {
+    size_t newLength = size * nmemb;
+    s->append((char*)contents, newLength);
+    return newLength;
+}
+
+int main() {
+    const std::string api_key = "YOUR_OPENAI_API_KEY";
+
+    CURL* curl = curl_easy_init();
+    if (!curl) {
+        std::cerr << "Failed to initialize curl.\n";
+        return 1;
+    }
+
+    // Limit to roughly 200 words → ~300 tokens
+    std::string json = R"({
+        "model": "gpt-4.1-mini",
+        "max_tokens": 300,
+        "messages": [
+            { "role": "user", "content": "Explain how rockets work in simple terms." }
+        ]
+    })";
+
+    std::string responseBuffer;
+    struct curl_slist* headers = nullptr;
+
+    headers = curl_slist_append(headers, ("Authorization: Bearer " + api_key).c_str());
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+
+    curl_easy_setopt(curl, CURLOPT_URL, "https://api.openai.com/v1/chat/completions");
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json.c_str());
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseBuffer);
+
+    CURLcode res = curl_easy_perform(curl);
+
+    if (res != CURLE_OK)
+        std::cerr << "CURL error: " << curl_easy_strerror(res) << "\n";
+    else
+        std::cout << "OpenAI Response:\n" << responseBuffer << "\n";
+
+    curl_easy_cleanup(curl);
+    curl_slist_free_all(headers);
+
+    return 0;
+}
